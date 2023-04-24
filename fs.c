@@ -42,6 +42,9 @@ union fs_block {
 	unsigned char data[BLOCK_SIZE];
 };
 
+int mounted = (1==0);
+unsigned char *freeblock = NULL;
+
 int fs_format()
 {
 	// Determine NINODEBLOCKS
@@ -102,7 +105,7 @@ void fs_debug()
 			if (block.inode[j].isvalid == 0)
 				continue;
 
-				
+
 			// print inode info
 			printf("inode %d:\n",j+1);
 			printf("    size: %d bytes\n",block.inode[j].size);
@@ -127,7 +130,18 @@ void fs_debug()
 int fs_mount()
 {
 	// Mount Filesystem
+	if (mounted == (1==1)) {
+		
+		return 0;
+	}
 	
+	mounted = (1==1);
+
+	// Load Super Block
+	union fs_block block;
+	disk_read(thedisk,0,block.data);
+
+	// 
 
 	return 0;
 }
