@@ -47,16 +47,32 @@ int fs_format()
 	// Determine NINODEBLOCKS
 	int nblocks = disk_nblocks(thedisk);
 	int ninodes = (int) ceil(nblocks / 10.0);
-
-	printf("inodes: %d\n",ninodes);
-
 	
 	// Declare Block B
+	union fs_block block;
 
 	// Fill in Superblock in B
+	block.super.magic = FS_MAGIC;
+	block.super.nblocks = nblocks;
+	block.super.ninodeblocks = ninodes;
+	block.super.ninodes = ninodes * INODES_PER_BLOCK;
 
 	// Fill in Inode Blocks in B
-	return 0;
+	for (int i=0; i<ninodes; i++)
+	{
+		for (int j=0; j<INODES_PER_BLOCK; j++)
+		{
+			block.inode[j].isvalid = 0;
+			block.inode[j].size = 0;
+			block.inode[j].ctime = 0;
+			for (int k=0; k<POINTERS_PER_INODE; k++)
+			{
+				block.inode[j].direct[k] = 0;
+			}
+			block.inode[j].indirect = 0;
+		}
+		disk_write(thedisk,i+1,block.data);
+	}
 
 	return 1;
 }
