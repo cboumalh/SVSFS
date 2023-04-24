@@ -198,7 +198,10 @@ int fs_mount()
 	if (mounted == (1==1)) {
 		printf("Already mounted\n");
 		return 0;
-	}	
+	}
+	
+	mounted = (1==1);
+	
 
 	// Load Super Block
 	union fs_block block;
