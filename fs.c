@@ -56,8 +56,9 @@ int fs_format()
 	block.super.nblocks = nblocks;
 	block.super.ninodeblocks = ninodes;
 	block.super.ninodes = ninodes * INODES_PER_BLOCK;
+	disk_write(thedisk,0,block.data);
 
-	// Fill in Inode Blocks in B
+	// Fill in inode Blocks in B
 	for (int i=0; i<ninodes; i++)
 	{
 		for (int j=0; j<INODES_PER_BLOCK; j++)
@@ -79,14 +80,48 @@ int fs_format()
 
 void fs_debug()
 {
+	// read and print super block
 	union fs_block block;
-
 	disk_read(thedisk,0,block.data);
 
 	printf("superblock:\n");
 	printf("    %d blocks\n",block.super.nblocks);
 	printf("    %d inode blocks\n",block.super.ninodeblocks);
 	printf("    %d inodes\n",block.super.ninodes);
+
+	// loop through inodes
+	for (int i = 0; i < block.super.ninodes; i++) {
+
+		// read inode block
+		disk_read(thedisk,i+1,block.data);
+
+		// loop through inodes in block
+		for (int j=0; j < INODES_PER_BLOCK; j++) {
+
+			// skip invalid inodes
+			if (block.inode[j].isvalid == 0)
+				continue;
+
+				
+			// print inode info
+			printf("inode %d:\n",j+1);
+			printf("    size: %d bytes\n",block.inode[j].size);
+			printf("    direct blocks:");
+
+
+			// loop through direct pointers
+			for (int k=0; k < POINTERS_PER_INODE; k++) {
+				// print direct pointers
+				if (block.inode[j].direct[k] != 0)
+					printf(" %d",block.inode[j].direct[k]);
+			}
+			printf("\n");
+
+			// print indirect pointer
+			if (block.inode[j].indirect != 0)
+				printf(" %d\n",block.inode[j].indirect);
+		}
+	}
 }
 
 int fs_mount()
