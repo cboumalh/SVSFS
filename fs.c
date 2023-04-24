@@ -148,14 +148,14 @@ void fs_debug()
 	printf("    %d inodes\n",block.super.ninodes);
 
 	// loop through inodes
-	for (int i = 0; i < block.super.ninodes; i++) {
+	for (int i = 0; i < block.super.ninodeblocks; i++) {
 		
 		// read inode block
 		disk_read(thedisk,i+1,block.data);
 
 		// loop through inodes in block
 		for (int j=0; j < INODES_PER_BLOCK; j++) {
-
+			
 			// skip invalid inodes
 			if (block.inode[j].isvalid == 0)
 				continue;
