@@ -26,6 +26,7 @@ int mounted = (1==0);
 unsigned char *freeblock = NULL;
 #define MIN(a,b) ((a)<(b)?(a):(b))
 #define DEBUG 1
+unsigned int nbrfreeblks;
 
 struct fs_superblock {
 	uint32_t magic;
@@ -164,7 +165,7 @@ void fs_debug()
 			printf("inode %d:\n",j);
 			printf("    valid: YES\n");
 			printf("    size: %d bytes\n",block.inode[j].size);
-			printf("    created: %s\n",ctime(&block.inode[j].ctime));
+			printf("    created: %s",ctime(&block.inode[j].ctime));
 			printf("    direct blocks:");
 
 
@@ -216,16 +217,58 @@ int fs_mount()
 
 	if (freeblock) free(freeblock);
 	unsigned int nb = disk_nblocks(thedisk);
+	nbrfreeblks = nb;
 	unsigned int nfbb = nb*sizeof(unsigned char)/8 + ((nb%8) != 0) ? 1 : 0;
 	freeblock = (unsigned char *)malloc(nfbb);
     if (freeblock == NULL) { perror("malloc failed"); return 0; }
 
-	printf("%d\n", nfbb);
+	// initialize free block bitmap
+	for(int i = 0; i < nb; i++)
+		markfree(i);
+
+	// mark super block and inode blocks as used
+	markused(0);
+	nbrfreeblks--;
+	for(int i = 0; i < block.super.ninodeblocks; i++){
+		markused(i + 1);
+		nbrfreeblks--;
+	}
+		
+	// mark used blocks
+	for(int i = 0; i < block.super.ninodes; i++) {
+		disk_read(thedisk,i+1,block.data);
+
+		// loop through inodes in block
+		for(int j = 0; j < INODES_PER_BLOCK; j++) {
+			if(block.inode[j].isvalid == 0) continue;
+
+			// mark direct pointers
+			for(int k = 0; k < POINTERS_PER_INODE; k++) {
+				if(block.inode[j].direct[k] == 0) continue;
+				markused(block.inode[j].direct[k]);
+				nbrfreeblks--;
+			}
+
+			// check indirect block
+			if(block.inode[j].indirect == 0) continue;
+			
+			markused(block.inode[j].indirect);
+			nbrfreeblks--;
+			
+			// mark indirect pointers
+			disk_read(thedisk,block.inode[j].indirect,block.data);
+			for(int k = 0; k < POINTERS_PER_BLOCK; k++) {
+				if(block.pointers[k] == 0) continue;
+				markused(block.pointers[k]);
+				nbrfreeblks--;
+			}
+		}
+	}
+
 
 	mounted = (1==1);
-
-	// 
-	return 0;
+	
+	return 1;
 }
 
 int fs_create()
