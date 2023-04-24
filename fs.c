@@ -11,6 +11,7 @@
 
 #include <stdio.h>
 #include <stdint.h>
+#include <math.h>
 
 extern struct disk *thedisk;
 
@@ -43,7 +44,21 @@ union fs_block {
 
 int fs_format()
 {
+	// Determine NINODEBLOCKS
+	int nblocks = disk_nblocks(thedisk);
+	int ninodes = (int) ceil(nblocks / 10.0);
+
+	printf("inodes: %d\n",ninodes);
+
+	
+	// Declare Block B
+
+	// Fill in Superblock in B
+
+	// Fill in Inode Blocks in B
 	return 0;
+
+	return 1;
 }
 
 void fs_debug()
@@ -60,6 +75,9 @@ void fs_debug()
 
 int fs_mount()
 {
+	// Mount Filesystem
+	
+
 	return 0;
 }
 
