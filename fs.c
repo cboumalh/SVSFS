@@ -141,21 +141,21 @@ void fs_debug()
 	// read and print super block
 	union fs_block block;
 	disk_read(thedisk,0,block.data);
+	struct fs_superblock superblock = block.super;
 
 	printf("superblock:\n");
-	printf("    %d blocks\n",block.super.nblocks);
-	printf("    %d inode blocks\n",block.super.ninodeblocks);
-	printf("    %d inodes\n",block.super.ninodes);
+	printf("    %d blocks\n",superblock.nblocks);
+	printf("    %d inode blocks\n",superblock.ninodeblocks);
+	printf("    %d inodes\n",superblock.ninodes);
 
 	// loop through inodes
-	for (int i = 0; i < block.super.ninodeblocks; i++) {
-		
+	for (int i = 0; i < superblock.ninodeblocks; i++) {
+
 		// read inode block
 		disk_read(thedisk,i+1,block.data);
-
+		
 		// loop through inodes in block
 		for (int j=0; j < INODES_PER_BLOCK; j++) {
-			
 			// skip invalid inodes
 			if (block.inode[j].isvalid == 0)
 				continue;
@@ -180,12 +180,15 @@ void fs_debug()
 			// print indirect pointer
 			if (block.inode[j].indirect != 0) {
 				printf("    indirect blocks (in block %d): ",block.inode[j].indirect);
-				disk_read(thedisk,block.inode[j].indirect,block.data);
+				
+				// read indirect block
+				union fs_block indirectblock;
+				disk_read(thedisk,block.inode[j].indirect,indirectblock.data);
 
 				for (int l=0; l < POINTERS_PER_BLOCK; l++) {
 					// print indirect pointers
-					if (block.pointers[l] != 0)
-						printf(" %d",block.pointers[l]);
+					if (indirectblock.pointers[l] != 0)
+						printf(" %d",indirectblock.pointers[l]);
 				}
 				printf("\n");
 			}
