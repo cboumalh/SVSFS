@@ -12,6 +12,9 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <math.h>
+#include <time.h>
+#include <stdlib.h>
+
 
 extern struct disk *thedisk;
 
@@ -19,6 +22,10 @@ extern struct disk *thedisk;
 #define INODES_PER_BLOCK   128
 #define POINTERS_PER_INODE 3
 #define POINTERS_PER_BLOCK 1024
+int mounted = (1==0);
+unsigned char *freeblock = NULL;
+#define MIN(a,b) ((a)<(b)?(a):(b))
+#define DEBUG 1
 
 struct fs_superblock {
 	uint32_t magic;
@@ -42,8 +49,55 @@ union fs_block {
 	unsigned char data[BLOCK_SIZE];
 };
 
-int mounted = (1==0);
-unsigned char *freeblock = NULL;
+void printfree() {
+        for(int i=0;i<disk_nblocks(thedisk);i++) {
+                printf("%02X",freeblock[i]);
+        }
+}
+
+// set the bit indicating that block b is free.
+void markfree(int b) {
+        int ix = b/8; // 8 bits per byte; this is the index of the byte to modify
+        unsigned char mask[] = { 0x80, 0x40, 0x20, 0x10, 0x08, 0x04, 0x02, 0x01};
+        // OR in the bit that corresponds to the block we're talking about.
+        freeblock[ix] |= mask[b%8];
+}
+
+// set the bit indicating that block b is used.
+void markused(int b) {
+        int ix = b/8; // 8 bits per byte; this is the index of the byte to modify
+        unsigned char mask[] = { 0x80, 0x40, 0x20, 0x10, 0x08, 0x04, 0x02, 0x01};
+        // AND the byte with the inverse of the bitmask to force the desired bit to 0
+        freeblock[ix] &= ~mask[b%8];
+}
+
+// check to see if block b is free
+int isfree(int b) {
+        int ix = b/8; // 8 bits per byte; this is the byte number
+        unsigned char mask[] = { 0x80, 0x40, 0x20, 0x10, 0x08, 0x04, 0x02, 0x01};
+        // if bit is set, return nonzero; else return zero
+        return ((freeblock[ix] & mask[b%8]) != 0);
+}
+
+int getfreeblock() {
+        //printf("Searching %d blocks for a free block\n",disk_nblocks(thedisk));
+        for(int i=0; i<disk_nblocks(thedisk);i++)
+                if (isfree(i)) {
+                        //printf("found free block at %d\n",i);
+                        return i;
+                }
+        printf("No free blocks found\n");
+        return -1;
+}
+
+// return number of free blocks
+// This also expects the superblock and inode blocks to be marked unavailable
+unsigned int nfreeblocks() {
+        unsigned int n=0;
+        for(int i=0;i<disk_nblocks(thedisk);i++)
+                if (isfree(i)) n++;
+        return n;
+}
 
 int fs_format()
 {
@@ -94,7 +148,7 @@ void fs_debug()
 
 	// loop through inodes
 	for (int i = 0; i < block.super.ninodes; i++) {
-
+		
 		// read inode block
 		disk_read(thedisk,i+1,block.data);
 
@@ -107,8 +161,10 @@ void fs_debug()
 
 
 			// print inode info
-			printf("inode %d:\n",j+1);
+			printf("inode %d:\n",j);
+			printf("    valid: YES\n");
 			printf("    size: %d bytes\n",block.inode[j].size);
+			printf("    created: %s\n",ctime(&block.inode[j].ctime));
 			printf("    direct blocks:");
 
 
@@ -121,8 +177,17 @@ void fs_debug()
 			printf("\n");
 
 			// print indirect pointer
-			if (block.inode[j].indirect != 0)
-				printf(" %d\n",block.inode[j].indirect);
+			if (block.inode[j].indirect != 0) {
+				printf("    indirect blocks (in block %d): ",block.inode[j].indirect);
+				disk_read(thedisk,block.inode[j].indirect,block.data);
+
+				for (int l=0; l < POINTERS_PER_BLOCK; l++) {
+					// print indirect pointers
+					if (block.pointers[l] != 0)
+						printf(" %d",block.pointers[l]);
+				}
+				printf("\n");
+			}
 		}
 	}
 }
@@ -131,18 +196,35 @@ int fs_mount()
 {
 	// Mount Filesystem
 	if (mounted == (1==1)) {
-		
+		printf("Already mounted\n");
 		return 0;
-	}
-	
-	mounted = (1==1);
+	}	
 
 	// Load Super Block
 	union fs_block block;
 	disk_read(thedisk,0,block.data);
 
-	// 
+	if(block.super.magic != FS_MAGIC){
+		printf("Magic Number Incorrect\n");
+		return 0;
+	}
 
+	if(block.super.ninodeblocks == 0 || block.super.nblocks == 0){
+		printf("No blocks or inode blocks\n");
+		return 0;
+	}
+
+	if (freeblock) free(freeblock);
+	unsigned int nb = disk_nblocks(thedisk);
+	unsigned int nfbb = nb*sizeof(unsigned char)/8 + ((nb%8) != 0) ? 1 : 0;
+	freeblock = (unsigned char *)malloc(nfbb);
+    if (freeblock == NULL) { perror("malloc failed"); return 0; }
+
+	printf("%d\n", nfbb);
+
+	mounted = (1==1);
+
+	// 
 	return 0;
 }
 
