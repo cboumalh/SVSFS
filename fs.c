@@ -334,7 +334,74 @@ int fs_create()
 
 int fs_delete( int inumber )
 {
-	return 0;
+	// check if mounted
+	if (mounted == (1==0)) {
+		printf("Not mounted\n");
+		return 0;
+	}
+
+	// read super block
+	union fs_block block;
+	disk_read(thedisk,0,block.data);
+	struct fs_superblock superblock = block.super;
+	int ninodes = superblock.ninodes;
+
+	// check if inumber is valid
+	if (inumber < 1 || inumber > ninodes) {
+		printf("Invalid inumber\n");
+		return 0;
+	}
+
+	// read inode block
+	int inodeblock = inumber/INODES_PER_BLOCK + 1;
+	int inodeindex = inumber%INODES_PER_BLOCK;
+
+	disk_read(thedisk,inodeblock,block.data);
+
+	// check if inode is valid
+	if (block.inode[inodeindex].isvalid == 0) {
+		printf("Inode not valid\n");
+		return 0;
+	}
+
+	// free direct pointers
+	for (int i=0; i < POINTERS_PER_INODE; i++) {
+		if (block.inode[inodeindex].direct[i] == 0)
+			continue;
+
+		block.inode[inodeindex].direct[i] = 0;
+		markfree(block.inode[inodeindex].direct[i]);
+		nbrfreeblks--;
+	}
+
+	// free indirect pointers
+	if (block.inode[inodeindex].indirect != 0) {
+		disk_read(thedisk,block.inode[inodeindex].indirect,block.data);
+
+		for (int i=0; i < POINTERS_PER_BLOCK; i++) {
+			if (block.pointers[i] == 0)
+				continue;
+			block.pointers[i] = 0;
+			markfree(block.pointers[i]);
+			nbrfreeblks--;
+		}
+
+		disk_write(thedisk,block.inode[inodeindex].indirect,block.data);
+
+		block.inode[inodeindex].indirect = 0;
+		markfree(block.inode[inodeindex].indirect);
+		nbrfreeblks--;
+	}
+
+	// set inode to invalid
+	block.inode[inodeindex].isvalid = 0;
+	block.inode[inodeindex].size = 0;
+	block.inode[inodeindex].ctime = 0;
+
+	// write inode block
+	disk_write(thedisk,inodeblock,block.data);
+
+	return 1;
 }
 
 int fs_getsize( int inumber )
