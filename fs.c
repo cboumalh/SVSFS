@@ -162,7 +162,7 @@ void fs_debug()
 
 
 			// print inode info
-			printf("inode %d:\n",j);
+			printf("inode %d:\n",i*INODES_PER_BLOCK + j);
 			printf("    valid: YES\n");
 			printf("    size: %d bytes\n",block.inode[j].size);
 			printf("    created: %s",ctime(&block.inode[j].ctime));
@@ -279,6 +279,56 @@ int fs_mount()
 
 int fs_create()
 {
+	// check if mounted
+	if (mounted == (1==0)) {
+		printf("Not mounted\n");
+		return 0;
+	}
+
+	// read super block
+	union fs_block block;
+	disk_read(thedisk,0,block.data);
+	struct fs_superblock superblock = block.super;
+	int ninodeblocks = superblock.ninodeblocks;
+
+
+	// loop through inode blocks
+	for (int i=0; i<ninodeblocks; i++) {
+		// read inode block
+		disk_read(thedisk,i+1,block.data);
+
+		// loop through inodes in block
+		for (int j=0; j < INODES_PER_BLOCK; j++) {
+
+			// skip inode 0
+			if (i == 0 && j == 0)
+				continue;
+
+			// break if isvalid not set
+			if (block.inode[j].isvalid == 0) {
+				// set inode
+				block.inode[j].isvalid = 1;
+				block.inode[j].size = 0;
+				block.inode[j].ctime = time(NULL);
+
+				// set direct pointers
+				for (int k=0; k < POINTERS_PER_INODE; k++)
+					block.inode[j].direct[k] = 0;
+
+				// set indirect pointer
+				block.inode[j].indirect = 0;
+
+				// write inode block
+				disk_write(thedisk,i+1,block.data);
+
+				// return inode number
+				return i*INODES_PER_BLOCK + j;
+			}
+		}
+	}
+
+	// empty inode not found
+	printf("No empty inode\n");
 	return 0;
 }
 
