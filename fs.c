@@ -406,7 +406,37 @@ int fs_delete( int inumber )
 
 int fs_getsize( int inumber )
 {
-	return 0;
+	// check if mounted
+	if (mounted == (1==0)) {
+		printf("Not mounted\n");
+		return -1;
+	}
+
+	// read super block
+	union fs_block block;
+	disk_read(thedisk,0,block.data);
+	struct fs_superblock superblock = block.super;
+	int ninodes = superblock.ninodes;
+
+	// check if inumber is valid
+	if (inumber < 1 || inumber > ninodes) {
+		printf("Invalid inumber\n");
+		return -1;
+	}
+
+	// read inode block
+	int inodeblock = inumber/INODES_PER_BLOCK + 1;
+	int inodeindex = inumber%INODES_PER_BLOCK;
+
+	disk_read(thedisk,inodeblock,block.data);
+
+	// check if inode is valid
+	if (block.inode[inodeindex].isvalid == 0) {
+		printf("Inode not valid\n");
+		return -1;
+	}
+
+	return block.inode[inodeindex].size;
 }
 
 int fs_read( int inumber, unsigned char *data, int length, int offset )
