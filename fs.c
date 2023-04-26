@@ -532,7 +532,7 @@ int fs_read( int inumber, unsigned char *data, int length, int offset )
 	int *pointers = block.pointers;
 
 	for (int i=0; i<POINTERS_PER_BLOCK; i++) {
-		printf("pointers[%d] = %d, offset: %d\n",i,pointers[i], offset);
+
 		if (pointers[i] == 0)
 			continue;
 
@@ -555,18 +555,19 @@ int fs_read( int inumber, unsigned char *data, int length, int offset )
 		} 
 		// full block read
 		else if (length > BLOCK_SIZE) {
-			memcpy(data+bytesread,block.data,BLOCK_SIZE);
+			memcpy(data+bytesread,blockdata,BLOCK_SIZE);
 			bytesread += BLOCK_SIZE;
 			length -= BLOCK_SIZE;
 		} 
 		// partial block read at end
 		else {
-			memcpy(data+bytesread,block.data,length);
+			memcpy(data+bytesread,blockdata,length);
 			bytesread += length;
 			length = 0;
 			break;
 		}
 	}
+
 	printf("bytesread: %d\n",bytesread);
 	return bytesread;
 }
