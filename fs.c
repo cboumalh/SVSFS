@@ -14,6 +14,7 @@
 #include <math.h>
 #include <time.h>
 #include <stdlib.h>
+#include <string.h>
 
 
 extern struct disk *thedisk;
@@ -206,7 +207,6 @@ int fs_mount()
 	
 	mounted = (1==1);
 	
-
 	// Load Super Block
 	union fs_block block;
 	disk_read(thedisk,0,block.data);
@@ -441,7 +441,134 @@ int fs_getsize( int inumber )
 
 int fs_read( int inumber, unsigned char *data, int length, int offset )
 {
-	return 0;
+	// check if mounted
+	if (mounted == (1==0)) {
+		printf("Not mounted\n");
+		return 0;
+	}
+
+	// read super block
+	union fs_block block;
+	disk_read(thedisk,0,block.data);
+	struct fs_superblock superblock = block.super;
+	int ninodes = superblock.ninodes;
+
+	// check if inumber is valid
+	if (inumber < 1 || inumber > ninodes) {
+		printf("Invalid inumber\n");
+		return 0;
+	}
+
+	// read inode block
+	int inodeblock = inumber/INODES_PER_BLOCK + 1;
+	int inodeindex = inumber%INODES_PER_BLOCK;
+
+	disk_read(thedisk,inodeblock,block.data);
+	struct fs_inode inode = block.inode[inodeindex];
+
+	// check if inode is valid
+	if (inode.isvalid == 0) {
+		printf("Inode not valid\n");
+		return 0;
+	}
+
+	// check if offset is valid
+
+	if (offset < 0 || offset > inode.size) {
+		printf("Invalid offset\n");
+		return 0;
+	}
+
+	if (offset == inode.size) {
+		return 0;
+	}
+
+	// adjust length if necessary
+	if (offset + length > inode.size)
+		length = inode.size - offset;
+
+	// read data
+	int bytesread = 0;
+
+	for (int i=0; i < POINTERS_PER_INODE; i++) {
+		if (inode.direct[i] == 0)
+			continue;
+
+		if (offset > BLOCK_SIZE) {
+			offset -= BLOCK_SIZE;
+			continue;
+		}
+
+		disk_read(thedisk, inode.direct[i],block.data);
+		unsigned char *blockdata = block.data;
+
+		// partial block read at beginning
+		if (offset > 0) {
+			blockdata += offset;
+			memcpy(data+bytesread,blockdata,BLOCK_SIZE-offset);
+			bytesread += BLOCK_SIZE-offset;
+			length -= BLOCK_SIZE-offset;
+			offset = 0;
+		} 
+		// full block read
+		else if (length > BLOCK_SIZE) {
+			memcpy(data+bytesread,block.data,BLOCK_SIZE);
+			bytesread += BLOCK_SIZE;
+			length -= BLOCK_SIZE;
+		} 
+		// partial block read at end
+		else {
+			memcpy(data+bytesread,block.data,length);
+			bytesread += length;
+			length = 0;
+			break;
+		}
+	}
+
+	// read indrect blocks
+	if (inode.indirect == 0) return bytesread;
+
+	disk_read(thedisk,inode.indirect,block.data);
+	int *pointers = block.pointers;
+
+	for (int i=0; i<POINTERS_PER_BLOCK; i++) {
+		printf("pointers[%d] = %d, offset: %d\n",i,pointers[i], offset);
+		if (pointers[i] == 0)
+			continue;
+
+		if (offset > BLOCK_SIZE) {
+			offset -= BLOCK_SIZE;
+			continue;
+		}
+
+		union fs_block b;
+		disk_read(thedisk, pointers[i], b.data);
+		unsigned char *blockdata = b.data;
+
+		// partial block read at beginning
+		if (offset > 0) {
+			blockdata += offset;
+			memcpy(data+bytesread,blockdata,BLOCK_SIZE-offset);
+			bytesread += BLOCK_SIZE-offset;
+			length -= BLOCK_SIZE-offset;
+			offset = 0;
+		} 
+		// full block read
+		else if (length > BLOCK_SIZE) {
+			memcpy(data+bytesread,block.data,BLOCK_SIZE);
+			bytesread += BLOCK_SIZE;
+			length -= BLOCK_SIZE;
+		} 
+		// partial block read at end
+		else {
+			memcpy(data+bytesread,block.data,length);
+			bytesread += length;
+			length = 0;
+			break;
+		}
+	}
+	printf("bytesread: %d\n",bytesread);
+	return bytesread;
 }
 
 int fs_write( int inumber, const unsigned char *data, int length, int offset )
