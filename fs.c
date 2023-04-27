@@ -574,5 +574,143 @@ int fs_read( int inumber, unsigned char *data, int length, int offset )
 
 int fs_write( int inumber, const unsigned char *data, int length, int offset )
 {
-	return 0;
+
+	if (mounted == (1==0)) {
+		printf("Not mounted\n");
+		return 0;
+	}
+
+	// read super block
+	union fs_block block;
+	disk_read(thedisk,0,block.data);
+	struct fs_superblock superblock = block.super;
+	int ninodes = superblock.ninodes;
+
+	// check if inumber is valid
+	if (inumber < 1 || inumber > ninodes) {
+		printf("Invalid inumber\n");
+		return 0;
+	}
+
+	// read inode block
+	int inodeblock = inumber/INODES_PER_BLOCK + 1;
+	int inodeindex = inumber%INODES_PER_BLOCK;
+
+	disk_read(thedisk,inodeblock,block.data);
+	struct fs_inode inode = block.inode[inodeindex];
+
+	// check if inode is valid
+	if (inode.isvalid == 0) {
+		printf("Inode not valid\n");
+		return 0;
+	}
+
+	if (offset < 0 || offset > inode.size) {
+		printf("Invalid offset\n");
+		return 0;
+	}
+
+
+	int nfree = nfreeblocks();
+
+	if(length > BLOCK_SIZE * nfree){
+		printf("No free blocks\n");
+		return 0;
+	}
+
+	int data_block_index = offset / BLOCK_SIZE;
+	int data_offset = offset % BLOCK_SIZE;
+
+
+	int nwrite = 0;
+	int ncopy;
+
+	if(length < BLOCK_SIZE)
+		ncopy = length;
+	else
+		ncopy = BLOCK_SIZE - data_offset;
+
+	while(nwrite < length){
+		union fs_block data_block = {{0}};
+		union fs_block indirblock = {{0}};
+		int selected_block = 0;
+
+		if(data_block_index < POINTERS_PER_INODE){
+			if(inode.direct[data_block_index] == 0){
+				if((selected_block = getfreeblock()) == -1){
+					printf("No free blocks\n");
+					return 0;
+				}
+				block.inode[inodeindex].direct[data_block_index] = selected_block;
+			}
+
+			if(block.inode[inodeindex].direct[data_block_index] < superblock.nblocks){
+				disk_read(thedisk, block.inode[inodeindex].direct[data_block_index], data_block.data);
+				memcpy(data_block.data + data_offset, data + nwrite, ncopy);
+				disk_write(thedisk, block.inode[inodeindex].direct[data_block_index], data_block.data);
+			}
+			else return 0;
+		}
+		else{
+			int indirect_offset = data_block_index - POINTERS_PER_INODE;
+
+			if(indirect_offset >= POINTERS_PER_BLOCK){
+				printf("All pointers used\n");
+				return nwrite;
+			}
+
+			if(inode.indirect == 0){
+				if((selected_block = getfreeblock()) == -1){
+					printf("No free blocks\n");
+					return 0;
+				}
+				block.inode[inodeindex].indirect = selected_block;
+			}
+			else{
+				if(inode.indirect < superblock.nblocks){
+					disk_read(thedisk, block.inode[inodeindex].indirect, indirblock.data);
+				}
+				else return 0;
+			}
+
+			if(indirblock.pointers[indirect_offset] == 0){
+				if((selected_block = getfreeblock()) == -1){
+					printf("No free blocks\n");
+					return 0;
+				}
+				if(selected_block < superblock.nblocks){
+					indirblock.pointers[indirect_offset] = selected_block;
+					disk_write(thedisk, block.inode[inodeindex].indirect, indirblock.data);
+				}
+			}
+			else{
+				if(indirblock.pointers[indirect_offset] < superblock.nblocks){
+					disk_read(thedisk, indirblock.pointers[indirect_offset], data_block.data);
+				}
+			}
+
+			if(indirblock.pointers[indirect_offset] < superblock.nblocks){
+				memcpy(data_block.data + data_offset, data + nwrite, ncopy);
+				disk_write(thedisk, indirblock.pointers[indirect_offset], data_block.data);
+			}
+		}
+
+		if(data_offset + ncopy < BLOCK_SIZE && selected_block > 0)
+			markused(selected_block);
+
+		data_offset = 0;
+		data_block_index += 1;
+		nwrite += ncopy;
+		if(length - nwrite > BLOCK_SIZE){
+			ncopy = BLOCK_SIZE;
+		}
+		else{
+			ncopy = length - nwrite;
+		}
+		block.inode[inodeindex].size = offset + nwrite;
+		if(inodeblock < superblock.nblocks){
+			disk_write(thedisk, inodeblock, block.data);
+		}
+	}
+	return nwrite;
 }
