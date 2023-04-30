@@ -632,7 +632,6 @@ int fs_write( int inumber, const unsigned char *data, int length, int offset )
 
 	while(nwrite < length){
 		union fs_block data_block = {{0}};
-		union fs_block indirblock = {{0}};
 		int selected_block = 0;
 
 		if(data_block_index < POINTERS_PER_INODE){
