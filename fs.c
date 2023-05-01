@@ -53,8 +53,9 @@ union fs_block {
 
 void printfree() {
         for(int i=0;i<disk_nblocks(thedisk);i++) {
-                printf("%02X",freeblock[i]);
+                printf("%02X ",freeblock[i]);
         }
+		printf("\n");
 }
 
 // set the bit indicating that block b is free.
@@ -205,8 +206,6 @@ int fs_mount()
 		return 0;
 	}
 	
-	mounted = (1==1);
-	
 	// Load Super Block
 	union fs_block block;
 	disk_read(thedisk,0,block.data);
@@ -270,7 +269,6 @@ int fs_mount()
 			}
 		}
 	}
-
 
 	mounted = (1==1);
 	
@@ -369,9 +367,9 @@ int fs_delete( int inumber )
 		if (block.inode[inodeindex].direct[i] == 0)
 			continue;
 
-		block.inode[inodeindex].direct[i] = 0;
 		markfree(block.inode[inodeindex].direct[i]);
-		nbrfreeblks--;
+		block.inode[inodeindex].direct[i] = 0;
+		nbrfreeblks++;
 	}
 
 	// free indirect pointers
@@ -383,16 +381,17 @@ int fs_delete( int inumber )
 		for (int i=0; i < POINTERS_PER_BLOCK; i++) {
 			if (indirectblock.pointers[i] == 0)
 				continue;
-			indirectblock.pointers[i] = 0;
+
 			markfree(indirectblock.pointers[i]);
-			nbrfreeblks--;
+			indirectblock.pointers[i] = 0;
+			nbrfreeblks++;
 		}
 
 		disk_write(thedisk,block.inode[inodeindex].indirect,indirectblock.data);
 
 		block.inode[inodeindex].indirect = 0;
 		markfree(block.inode[inodeindex].indirect);
-		nbrfreeblks--;
+		nbrfreeblks++;
 	}
 
 	// set inode to invalid
@@ -643,6 +642,7 @@ int fs_write( int inumber, const unsigned char *data, int length, int offset )
 				if((selected_block = getfreeblock()) == -1){
 					return 0;
 				}
+
 				block.inode[inodeindex].direct[data_block_index] = selected_block;
 				markused(selected_block);
 				disk_write(thedisk, inodeblock, block.data);
