@@ -190,6 +190,7 @@ static int do_copyin( const char *filename, int inumber )
 		if(result<=0) break;
 		if(result>0) {
 			actual = fs_write(inumber,buffer,result,offset);
+			printf("offset: %d, actual: %d, result: %d\n", offset, actual, result);
 			if(actual<0) {
 				printf("ERROR: fs_write return invalid result %d\n",actual);
 				break;
