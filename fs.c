@@ -376,17 +376,19 @@ int fs_delete( int inumber )
 
 	// free indirect pointers
 	if (block.inode[inodeindex].indirect != 0) {
-		disk_read(thedisk,block.inode[inodeindex].indirect,block.data);
+		// read indirect block
+		union fs_block indirectblock;
+		disk_read(thedisk,block.inode[inodeindex].indirect,indirectblock.data);
 
 		for (int i=0; i < POINTERS_PER_BLOCK; i++) {
-			if (block.pointers[i] == 0)
+			if (indirectblock.pointers[i] == 0)
 				continue;
-			block.pointers[i] = 0;
-			markfree(block.pointers[i]);
+			indirectblock.pointers[i] = 0;
+			markfree(indirectblock.pointers[i]);
 			nbrfreeblks--;
 		}
 
-		disk_write(thedisk,block.inode[inodeindex].indirect,block.data);
+		disk_write(thedisk,block.inode[inodeindex].indirect,indirectblock.data);
 
 		block.inode[inodeindex].indirect = 0;
 		markfree(block.inode[inodeindex].indirect);
